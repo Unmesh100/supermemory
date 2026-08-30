@@ -393,6 +393,33 @@ export class SupermemoryClient {
 		}
 	}
 
+	/**
+	 * Verify a document belongs to this client's active space.
+	 *
+	 * The SDK documents.get(id) response carries an optional, deprecated
+	 * containerTags field that the API may omit, so it cannot be trusted as a
+	 * scope gate. Instead, list documents scoped to this space and check for the
+	 * id. Returns true only when the document is present in the space.
+	 */
+	async documentExistsInSpace(id: string): Promise<boolean> {
+		const pageSize = 100
+		let page = 1
+		// Guard against pathological orgs: cap at a reasonable number of pages.
+		const maxPages = 100
+		for (let i = 0; i < maxPages; i++) {
+			const result = await this.getDocuments(
+				[this.containerTag],
+				page,
+				pageSize,
+			)
+			const docs = result.documents
+			if (docs.some((doc) => doc.id === id)) return true
+			if (docs.length < pageSize) return false
+			page++
+		}
+		return false
+	}
+
 	async listMemoryEntries(
 		page = 1,
 		limit = 50,
