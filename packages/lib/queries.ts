@@ -100,7 +100,9 @@ export const useDeleteDocument = (selectedProject: string) => {
 	return useMutation({
 		mutationFn: async (documentId: string) => {
 			// context for LLM: delete/memories/:documentId is documents delete endpoint not memories delete endpoint
-			const response = await $fetch(`@delete/documents/${documentId}`)
+			const response = await $fetch(
+			`@delete/documents/${encodeURIComponent(documentId)}`,
+		)
 			if (response.error) {
 				throw new Error(response.error?.message || "Failed to delete document")
 			}
