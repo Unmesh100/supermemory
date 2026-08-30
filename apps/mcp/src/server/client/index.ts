@@ -264,6 +264,75 @@ export class SupermemoryClient {
 		}
 	}
 
+	/**
+	 * Search with structured filters (type, date range, source). Delegates to
+	 * the SDK search.memories endpoint with the filters field translated from
+	 * the tool's high-level filter args.
+	 */
+	async searchDocuments(
+		query: string,
+		limit = 10,
+		filters?: {
+			types?: string[]
+			source?: string
+			dateFrom?: string
+			dateTo?: string
+		},
+	): Promise<SearchResult> {
+		try {
+			const andClauses: Array<Record<string, unknown>> = []
+
+			if (filters?.types && filters.types.length > 0) {
+				andClauses.push({
+					OR: filters.types.map((type) => ({
+						key: "type",
+						value: type,
+						filterType: "metadata",
+					})),
+				})
+			}
+			if (filters?.source) {
+				andClauses.push({
+					key: "source",
+					value: filters.source,
+					filterType: "metadata",
+				})
+			}
+			if (filters?.dateFrom) {
+				andClauses.push({
+					key: "createdAt",
+					value: new Date(filters.dateFrom).getTime().toString(),
+					filterType: "numeric",
+					numericOperator: ">=",
+				})
+			}
+			if (filters?.dateTo) {
+				andClauses.push({
+					key: "createdAt",
+					value: new Date(filters.dateTo).getTime().toString(),
+					filterType: "numeric",
+					numericOperator: "<=",
+				})
+			}
+
+			const result = await this.client.search.memories({
+				q: query,
+				limit,
+				containerTag: this.containerTag,
+				searchMode: "hybrid",
+				...(andClauses.length > 0 ? { filters: { AND: andClauses } } : {}),
+			})
+
+			return {
+				results: mapSdkResults(result.results),
+				total: result.total,
+				timing: result.timing,
+			}
+		} catch (error) {
+			this.handleOperationError("Filtered search request", error)
+		}
+	}
+
 	async getProfile(query?: string): Promise<ProfileResponse> {
 		if (!this.hasExplicitContainerTag) {
 			return {
