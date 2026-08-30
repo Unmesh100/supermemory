@@ -400,22 +400,25 @@ export class SupermemoryClient {
 	 * containerTags field that the API may omit, so it cannot be trusted as a
 	 * scope gate. Instead, list documents scoped to this space and check for the
 	 * id. Returns true only when the document is present in the space.
+	 *
+	 * Uses the maximum page size (1000) so most spaces resolve in a single call,
+	 * and caps the scan at 10 pages (10k docs) to bound latency for large orgs.
 	 */
 	async documentExistsInSpace(id: string): Promise<boolean> {
-		const pageSize = 100
-		let page = 1
-		// Guard against pathological orgs: cap at a reasonable number of pages.
-		const maxPages = 100
-		for (let i = 0; i < maxPages; i++) {
+		const pageSize = 1000
+		const maxPages = 10
+		const overallTimeout = AbortSignal.timeout(FETCH_TIMEOUT_MS * maxPages)
+		for (let attempt = 0; attempt < maxPages; attempt++) {
+			if (overallTimeout.aborted) return false
 			const result = await this.getDocuments(
 				[this.containerTag],
-				page,
+				attempt + 1,
 				pageSize,
+				{ signal: overallTimeout },
 			)
 			const docs = result.documents
 			if (docs.some((doc) => doc.id === id)) return true
 			if (docs.length < pageSize) return false
-			page++
 		}
 		return false
 	}
