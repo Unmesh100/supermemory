@@ -61,6 +61,40 @@ app.get("/", (c) => {
 	})
 })
 
+app.get("/health", async (c) => {
+	const apiUrl = (c.env.API_URL || DEFAULT_API_URL).replace(/\/+$/, "")
+	const started = performance.now()
+	let authBackend: "ok" | "degraded" | "down" = "ok"
+	let authLatencyMs: number | undefined
+
+	try {
+		const response = await fetch(`${apiUrl}/api/auth/health`, {
+			signal: AbortSignal.timeout(5_000),
+		})
+		authLatencyMs = Math.round(performance.now() - started)
+		if (!response.ok) authBackend = "degraded"
+	} catch {
+		authBackend = "down"
+		authLatencyMs = Math.round(performance.now() - started)
+	}
+
+	const status = authBackend === "ok" ? "ok" : "degraded"
+	return c.json(
+		{
+			status,
+			version: "1.0.0",
+			service: "supermemory-mcp",
+			timestamp: new Date().toISOString(),
+			dependencies: {
+				authBackend: { status: authBackend, latencyMs: authLatencyMs },
+				rateLimiter: { status: c.env.RATE_LIMITER ? "configured" : "disabled" },
+			},
+		},
+		authBackend === "ok" ? 200 : 503,
+		{ "Cache-Control": "no-store" },
+	)
+})
+
 function resourceMetadata(c: Context<{ Bindings: Bindings }>) {
 	const apiUrl = c.env.API_URL || DEFAULT_API_URL
 	const mcpResource = c.env.MCP_RESOURCE || DEFAULT_MCP_RESOURCE
